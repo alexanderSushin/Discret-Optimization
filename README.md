@@ -5,4 +5,4 @@
 
 ## Папки
 - [set_cover] - папка с Solution.ipynb, где лежит рабочее решение и в Markdown ячейках написан отчет.
-- [knapsack] - #TODO
+- [knapsack] - папка с Solution.ipynb, где в Markdown ячейках написан отчет, cpp_methods хранит код алгоритмов на C++, которые запускаются в ipynb.
