@@ -8,3 +8,4 @@
 - [knapsack] - папка с Solution.ipynb, где в Markdown ячейках написан отчет, cpp_methods хранит код алгоритмов на C++, которые запускаются в ipynb.
 - [coloring] - папка с Solution.ipynb, где в Markdown ячейках написан отчет, cpp_methods хранит код алгоритмов на C++, которые запускаются в ipynb.
 - [tsp] - папка с Solution.ipynb, где в Markdown ячейках написан отчет, cpp_methods хранит код алгоритмов на C++, которые запускаются в ipynb.
+- [facility] - папка с Solution.ipynb, где в Markdown ячейках написан отчет, cpp_methods хранит код алгоритмов на C++, которые запускаются в ipynb.
