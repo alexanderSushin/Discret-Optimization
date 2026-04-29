@@ -11,6 +11,7 @@
 using namespace std;
 
 mt19937 rng(4257179);
+const double EPS = 1e-9;
 
 double Dist(pair<double, double> a, pair<double, double> b) {
     double dx = a.first - b.first;
@@ -46,7 +47,6 @@ struct PointDist {
 
 PointDist dists;
 
-const int K = 20;
 const double INF = 1e18;
 
 vector<int> Greedy(int n) {
@@ -60,7 +60,7 @@ vector<int> Greedy(int n) {
         for (int j = 0; j < n; ++j) {
             if (used[j]) continue;
             double d = dists.GetDist(end, j);
-            
+
             if (opt_idx == -1 || d < opt_val) {
                 opt_idx = j;
                 opt_val = d;
@@ -72,12 +72,30 @@ vector<int> Greedy(int n) {
     return order;
 }
 
-void LocalOpt(int n, vector<int>& order) {
-    double path_sm = 0;
-    for (int i = 0; i < n; ++i) {
-        int nxt = (i + 1 == n ? 0 : i + 1);
-        path_sm += dists.GetDist(order[i], order[nxt]);
+void cyclic_reverse(vector<int>& order, int l, int r) {
+    int n = order.size();
+
+    while (true) {
+        swap(order[l], order[r]);
+
+        if (l == r || (l + 1) % n == r)
+            break;
+
+        l = (l + 1) % n;
+        r = (r - 1 + n) % n;
     }
+}
+
+void KernighanLin(int n, vector<int>& order) {
+    auto cost = [&](const vector<int>& cur_order) {
+        double path_sm = 0;
+        for (int i = 0; i < n; ++i) {
+            int nxt = (i + 1 == n ? 0 : i + 1);
+            path_sm += dists.GetDist(cur_order[i], cur_order[nxt]);
+        }
+        return path_sm;
+    };
+
     auto prv = [&](int i) {
         if (i == 0) return n - 1;
         return i - 1;
@@ -89,80 +107,101 @@ void LocalOpt(int n, vector<int>& order) {
     };
 
     bool found = true;
+
     auto start_time = chrono::steady_clock::now();
+    vector<vector<bool>> used(n, vector<bool>(n));
+
     while (found) {
-        auto now = chrono::steady_clock::now();
-        auto elapsed = chrono::duration_cast<chrono::seconds>(now - start_time).count();
-        if (elapsed > 30) break;
-        
         found = false;
-        
-        for (int s = 1; s < n; ++s) {
+        double cycle_cost = cost(order);
+
+        vector<int> b_order(n);
+        iota(b_order.begin(), b_order.end(), 0);
+        shuffle(b_order.begin(), b_order.end(), rng);
+
+        for (int init_b : b_order) {;
+
+            vector<pair<int, int>> deleted;
+
+            auto delete_edge = [&](int x, int y) {
+              deleted.push_back({x, y});
+              used[x][y] = used[y][x] = true;
+            };
+
             if (found) break;
-            // [... s, ..., t, ...]
-            // [..., t, ..., s, ...]
-        
-            for (int t = s + 1; t < n; ++t) {
-                if (found) break;
-                
-                double was_val = dists.GetDist(order[s], order[prv(s)]) + 
-                                 dists.GetDist(order[t], order[nxt(t)]);
-                
-                double next_val = dists.GetDist(order[s], order[nxt(t)]) + 
-                                  dists.GetDist(order[t], order[prv(s)]);
-    
-                if (next_val < was_val) {
-                    found = true;
-                    reverse(order.begin() + s, order.begin() + t + 1);
-                    path_sm += next_val - was_val;
+            vector<int> now_order = order;
+
+            // [..., a - b, ...]
+            int pos_b = init_b;
+            int pos_a = prv(init_b);
+
+            delete_edge(now_order[pos_a], now_order[pos_b]);
+
+            double ref_cost = cycle_cost - dists.GetDist(now_order[pos_a], now_order[pos_b]);
+
+            while (1) {
+                auto now = chrono::steady_clock::now();
+                auto elapsed = chrono::duration_cast<chrono::seconds>(now - start_time).count();
+                if (elapsed > 30) return;
+                int opt_d = -1;
+                double opt_val = INF;
+
+                for (int pos_d = 0; pos_d < n; ++pos_d) {
+                    // [..., a - b, ... d]
+                    if (pos_d == pos_a || pos_d == pos_b) continue;
+                    int pos_c = prv(pos_d);
+                    if (pos_c == pos_b) continue;
+
+                    if (used[now_order[pos_c]][now_order[pos_d]]) continue;
+
+                    double add_edge = dists.GetDist(now_order[pos_b], now_order[pos_d]);
+                    if (add_edge < opt_val) {
+                        opt_val = add_edge;
+                        opt_d = pos_d;
+                    }
+                }
+
+                ref_cost += opt_val;
+
+                if (opt_d == -1 || ref_cost >= cycle_cost) {
                     break;
                 }
+                int pos_d = opt_d;
+                int pos_c = prv(pos_d);
+
+                ref_cost -= dists.GetDist(now_order[pos_c], now_order[pos_d]);
+                delete_edge(now_order[pos_c], now_order[pos_d]);
+
+                double estimation = ref_cost + dists.GetDist(now_order[pos_a], now_order[pos_c]);
+                if (estimation < cycle_cost - EPS) {
+                    found = true;
+                }
+
+                cyclic_reverse(now_order, pos_b, pos_c);
+                if (found) {
+                    order = now_order;
+                    break;
+                }
+
+                // [b ... c] -> [c ... b]
+                // reverse(pos_b, pos_c);
+            }
+
+
+            for (auto [x, y] : deleted) {
+                used[x][y] = used[y][x] = false;
             }
         }
+
+
     }
 }
 
 
-void double_bridge(vector<int>& order) {
-    int n = order.size();
-
-    int a = rng() % n;
-    int b = rng() % n;
-    int c = rng() % n;
-    int d = rng() % n;
-
-    vector<int> cuts = {a, b, c, d};
-    sort(cuts.begin(), cuts.end());
-
-    a = cuts[0];
-    b = cuts[1];
-    c = cuts[2];
-    d = cuts[3];
-
-    vector<int> new_order;
-    
-    new_order.insert(new_order.end(), order.begin(), order.begin() + a);
-    new_order.insert(new_order.end(), order.begin() + c, order.begin() + d);
-    new_order.insert(new_order.end(), order.begin() + b, order.begin() + c);
-    new_order.insert(new_order.end(), order.begin() + a, order.begin() + b);
-    new_order.insert(new_order.end(), order.begin() + d, order.end());
-
-    order = new_order;
-}
-
-vector<int> Annealing(int n) {
+vector<int> LocalSearch(int n) {
     vector<int> best_order(n);
     iota(best_order.begin(), best_order.end(), 0);
     double best = INF;
-    auto prv = [&](int i) {
-        if (i == 0) return n - 1;
-        return i - 1;
-    };
-
-    auto nxt = [&](int i) {
-        if (i == n - 1) return 0;
-        return i + 1;
-    };
 
     auto relax = [&](double path_sm, const vector<int>& order) -> double {
         if (best > path_sm) {
@@ -185,22 +224,18 @@ vector<int> Annealing(int n) {
     };
 
     auto init = Greedy(n);
-    LocalOpt(n, init);
-    relax(cost(init), init);
-    
     auto start_time = chrono::steady_clock::now();
     while (1) {
         auto now = chrono::steady_clock::now();
         auto elapsed = chrono::duration_cast<chrono::seconds>(now - start_time).count();
         if (elapsed > 600) break;
-        
-        vector<int> order = best_order;
-        double_bridge(order);
-        LocalOpt(n, order);
-        relax(cost(order), order);
+
+        KernighanLin(n, init);
+        relax(cost(init), init);
+        shuffle(init.begin(), init.end(), rng);
     }
 
-    LocalOpt(n, best_order);
+    // cout << cost(best_order) << endl;
     return best_order;
 }
 
@@ -219,7 +254,7 @@ int main(int argc, char** argv) {
 
     dists = PointDist(points);
 
-    vector<int> ordering = Annealing(n);
+    vector<int> ordering = LocalSearch(n);
     for (int i : ordering) {
         cout << i << ' ';
     }
