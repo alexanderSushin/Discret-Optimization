@@ -1,3 +1,4 @@
+
 #include <cstdio>
 #include <iostream>
 #include <vector>
@@ -68,6 +69,12 @@ double Cost(const vector<int> &cur_order) {
 
 const double Lambda = 1000;
 
+uniform_real_distribution<double> dst(0.0, 1.0);
+
+double prob() {
+    return dst(rng);
+}
+
 double OptInsVertex(vector<int> &path, int ver) {
     double best_add = INF;
     int best_id = -1;
@@ -109,80 +116,81 @@ struct Cycle {
     }
 };
 
-vector<vector<int>> Greedy(int n, int v, double cap, const vector<double> &req) {
-    vector<Cycle> cycles;
-    for (int i = 1; i <= n; ++i) {
-        cycles.emplace_back(vector<int>{i}, req[i]);
-    }
+void GreedySolve(
+    int n,
+    int v,
+    double cap,
+    const vector<double>& req,
+    vector<Cycle>& cycles,
+    function<double(double, double)> decide
+) {
+    bool found = true;
+    while (cycles.size() > v || found) {
+        found = false;
+        int cycle_id1, cycle_id2;
+        int cycle_pos1, cycle_pos2;
+        double best_add = INF;
+        for (int i = 0; i < cycles.size(); ++i) {
+            for (int j = i + 1; j < cycles.size(); ++j) {
+                // if (cycles[i].GetTaken() + cycles[j].GetTaken() > cap) continue;
+                for (int p1 : {0, cycles[i].Size() - 1}) {
+                    for (int p2 : {0, cycles[j].Size() - 1}) {
+                        double add = decide(cycles[i].GetTaken(), cycles[j].GetTaken());
 
-    auto GreedySolve = [&](function<double(double, double)> decide) {
-        bool found = true;
-        while (cycles.size() > v || found) {
-            found = false;
-            int cycle_id1, cycle_id2;
-            int cycle_pos1, cycle_pos2;
-            double best_add = INF;
-            for (int i = 0; i < cycles.size(); ++i) {
-                for (int j = i + 1; j < cycles.size(); ++j) {
-                    // if (cycles[i].GetTaken() + cycles[j].GetTaken() > cap) continue;
-                    for (int p1 : {0, cycles[i].Size() - 1}) {
-                        for (int p2 : {0, cycles[j].Size() - 1}) {
-                            double add = decide(cycles[i].GetTaken(), cycles[j].GetTaken());
-
-                            add -= dists.GetDist(cycles[i].GetPoint(p1), 0);
-                            add -= dists.GetDist(cycles[j].GetPoint(p2), 0);
-                            add += dists.GetDist(cycles[i].GetPoint(p1), cycles[j].GetPoint(p2));
-                            if (add < best_add) {
-                                best_add = add;
-                                cycle_id1 = i;
-                                cycle_id2 = j;
-                                cycle_pos1 = p1;
-                                cycle_pos2 = p2;
-                            }
+                        add -= dists.GetDist(cycles[i].GetPoint(p1), 0);
+                        add -= dists.GetDist(cycles[j].GetPoint(p2), 0);
+                        add += dists.GetDist(cycles[i].GetPoint(p1), cycles[j].GetPoint(p2));
+                        if (add < best_add) {
+                            best_add = add;
+                            cycle_id1 = i;
+                            cycle_id2 = j;
+                            cycle_pos1 = p1;
+                            cycle_pos2 = p2;
                         }
                     }
                 }
             }
-
-            if (best_add < 0) {
-                found = true;
-            }
-
-            if (best_add >= INF) {
-                break;
-            }
-
-            Cycle lhs = cycles[cycle_id1];
-            Cycle rhs = cycles[cycle_id2];
-            cycles.erase(cycles.begin() + cycle_id2);
-            cycles.erase(cycles.begin() + cycle_id1);
-
-            if (cycle_pos1 + 1 != lhs.Size()) {
-                reverse(lhs.order.begin(), lhs.order.end());
-            }
-            if (cycle_pos2 != 0) {
-                reverse(rhs.order.begin(), rhs.order.end());
-            }
-            lhs.order.insert(lhs.order.end(), rhs.order.begin(), rhs.order.end());
-            lhs.taken += rhs.taken;
-            cycles.push_back(lhs);
         }
-    };
 
+        if (best_add < 0) {
+            found = true;
+        }
 
+        if (best_add >= INF) {
+            break;
+        }
+
+        Cycle lhs = cycles[cycle_id1];
+        Cycle rhs = cycles[cycle_id2];
+        cycles.erase(cycles.begin() + cycle_id2);
+        cycles.erase(cycles.begin() + cycle_id1);
+
+        if (cycle_pos1 + 1 != lhs.Size()) {
+            reverse(lhs.order.begin(), lhs.order.end());
+        }
+        if (cycle_pos2 != 0) {
+            reverse(rhs.order.begin(), rhs.order.end());
+        }
+        lhs.order.insert(lhs.order.end(), rhs.order.begin(), rhs.order.end());
+        lhs.taken += rhs.taken;
+        cycles.push_back(lhs);
+    }
+}
+
+vector<vector<int>> Greedy(int n, int v, double cap, const vector<double> &req, vector<Cycle>& cycles) {
     auto decide1 = [cap](double lhs, double rhs) {
         if (lhs + rhs > cap) return 2 * INF;
         return 0.0;
     };
 
-    GreedySolve(decide1);
+    GreedySolve(n, v, cap, req, cycles, decide1);
 
     // cout << cycles.size() << endl;
     if (cycles.size() > v) {
         auto decide2 = [&](double lhs, double rhs) {
           return max(0.0, lhs + rhs - cap) * Lambda;
         };
-        GreedySolve(decide2);
+        GreedySolve(n, v, cap, req, cycles, decide2);
     }
 
 
@@ -201,6 +209,24 @@ vector<vector<int>> Greedy(int n, int v, double cap, const vector<double> &req) 
 
 
     return decomp;
+}
+
+
+double GetDecompValue(int n, int v, double cap, const vector<double>& req, const vector<vector<int>>& decomp) {
+    double result = 0;
+    vector<double> taken(v);
+    for (int i = 0; i < v; ++i) {
+        result += Cost(decomp[i]);
+        for (auto x : decomp[i]) {
+            if (x != 0) {
+                taken[i] += req[x];
+            }
+        }
+    }
+    for (int i = 0; i < v; ++i) {
+        result += max(0.0, taken[i] - cap) * Lambda;
+    }
+    return result;
 }
 
 vector<vector<int>> LocalSearch
@@ -226,14 +252,8 @@ vector<vector<int>> LocalSearch
     for (int i = 0; i < v; ++i) {
         result += max(0.0, taken[i] - cap) * Lambda;
     }
-    auto start_time = chrono::steady_clock::now();
+
     while (1) {
-        // cout << result << endl;
-        auto now = chrono::steady_clock::now();
-        auto elapsed = chrono::duration_cast<chrono::seconds>(now - start_time).count();
-        if (elapsed > 60) {
-            break;
-        }
 
         double best_result = result;
         int best_id = -1;
@@ -280,11 +300,74 @@ vector<vector<int>> LocalSearch
             decomp[best_change] = path2;
             taken[best_change] += req[best_id];
             mapping[best_id] = best_change;
+            continue;
+        }
+
+
+        int best_id1, best_id2;
+        for (int id1 = 1; id1 <= n; ++id1) {
+            for (int id2 = id1 + 1; id2 <= n; ++id2) {
+                if (mapping[id1] == mapping[id2]) continue;
+                double cur_result = result;
+                cur_result -= max(0.0, taken[mapping[id1]] - cap) * Lambda;
+                cur_result -= max(0.0, taken[mapping[id2]] - cap) * Lambda;
+
+                auto path1 = decomp[mapping[id1]];
+                auto path2 = decomp[mapping[id2]];
+
+                cur_result -= Cost(path1);
+                cur_result -= Cost(path2);
+
+                path1.erase(find(path1.begin(), path1.end(), id1));
+                cur_result += OptInsVertex(path1, id2);
+
+                path2.erase(find(path2.begin(), path2.end(), id2));
+                cur_result += OptInsVertex(path2, id1);
+
+                cur_result += max(0.0, taken[mapping[id1]] - req[id1] + req[id2] - cap) * Lambda;
+                cur_result += max(0.0, taken[mapping[id2]] - req[id2] + req[id1] - cap) * Lambda;
+
+                if (cur_result < best_result) {
+                    best_result = cur_result;
+                    best_id1 = id1;
+                    best_id2 = id2;
+                }
+            }
+        }
+
+        if (best_result < result) {
+            result = best_result;
+            auto path1 = decomp[mapping[best_id1]];
+            auto path2 = decomp[mapping[best_id2]];
+
+            path1.erase(find(path1.begin(), path1.end(), best_id1));
+            path2.erase(find(path2.begin(), path2.end(), best_id2));
+            OptInsVertex(path1, best_id2);
+            OptInsVertex(path2, best_id1);
+
+            taken[mapping[best_id1]] += req[best_id2] - req[best_id1];
+            taken[mapping[best_id2]] += req[best_id1] - req[best_id2];
+            swap(mapping[best_id1], mapping[best_id2]);
+
+            decomp[mapping[best_id1]] = path2;
+            decomp[mapping[best_id2]] = path1;
         } else {
             break;
         }
     }
+
     return decomp;
+}
+
+vector<vector<int>> GreedyLocalSearch(int n, int v, double cap, const vector<double>& req) {
+    vector<Cycle> cycles;
+    for (int i = 1; i <= n; ++i) {
+        cycles.emplace_back(vector<int>{i}, req[i]);
+    }
+
+    auto best_decomp = Greedy(n, v, cap, req, cycles);
+    LocalSearch(n, v, cap, req, best_decomp);
+    return best_decomp;
 }
 
 int main(int argc, char **argv) {
@@ -309,14 +392,7 @@ int main(int argc, char **argv) {
     }
 
     dists = PointDist(points);
-
-    vector<vector<int>> decomp = Greedy(n, v, cap, req);
-    LocalSearch(n, v, cap, req, decomp);
-    // double result = 0;
-    // for (int i = 0; i < v; ++i) {
-    //     result += Cost(decomp[i]);
-    // }
-    // cout << result << endl;
+    auto decomp = GreedyLocalSearch(n, v, cap, req);
 
     for (int i = 0; i < v; ++i) {
         auto it = find(decomp[i].begin(), decomp[i].end(), 0);
@@ -332,3 +408,4 @@ int main(int argc, char **argv) {
     fclose(stdout);
     return 0;
 }
+

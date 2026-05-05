@@ -161,14 +161,14 @@ int main(int argc, char **argv) {
 
     int n, v;
     cin >> n >> v;
+    --n;
     double cap;
     cin >> cap;
 
     vector<double> req(n + 1);
     vector<pair<double, double> > points(n + 1);
-    points[0] = make_pair(0, 0);
 
-    for (int i = 1; i <= n; ++i) {
+    for (int i = 0; i <= n; ++i) {
         cin >> req[i];
 
         double x, y;
