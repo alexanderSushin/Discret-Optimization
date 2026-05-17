@@ -18,6 +18,7 @@ double Dist(pair<double, double> a, pair<double, double> b) {
 }
 
 const double INF = 1e18;
+double RATIO = 0.3;
 
 struct MatchResult {
     double cost;
@@ -132,7 +133,7 @@ Greedy(
     while (true) {
         auto now = chrono::steady_clock::now();
         double elapsed = chrono::duration<double>(now - start).count();
-        if (elapsed > 60.0) break;
+        if (elapsed > 30.0) break;
     
         shuffle(order.begin(), order.end(), rng);
         try_order(order);
@@ -143,14 +144,14 @@ Greedy(
     while (true) {
         auto now = chrono::steady_clock::now();
         double elapsed = chrono::duration<double>(now - start).count();
-        if (elapsed > 60.0 || best_choice.empty()) break;
+        if (elapsed > 30.0 || best_choice.empty()) break;
         if (best_choice.empty()) break;
     
         vector<int> cand = best_choice;
         vector<bool> in(n, false);
         for (int x : cand) in[x] = true;
     
-        int max_remove = max(1, (int)ceil(0.3 * cand.size()));
+        int max_remove = max(1, (int)ceil(RATIO * cand.size()));
         uniform_int_distribution<int> dist(1, max_remove);
         int k_remove = dist(rng);
     
@@ -185,7 +186,7 @@ Greedy(
 int main(int argc, char** argv) {
     freopen(argv[1], "r", stdin);
     freopen("tmp/ans.txt", "w", stdout);
-
+    RATIO = stod(argv[2]);
     int n, m;
     cin >> n >> m;
     vector<double> price(n);

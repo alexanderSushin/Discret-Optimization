@@ -117,6 +117,8 @@ MatchResult GetMatching(
 
 const int EPOCH_COUNT = 1e4;
 
+double STEP = 0.999;
+
 pair<vector<int>, vector<int>>
 Annealing(
     int n,
@@ -159,7 +161,6 @@ Annealing(
 
 
     auto start = chrono::steady_clock::now();
-    double step = 0.999;
     
     while (true) {
         auto now = chrono::steady_clock::now();
@@ -185,7 +186,7 @@ Annealing(
                 choice[bit] = (choice[bit] ^ true);
             }
 
-            temperature *= step;
+            temperature *= STEP;
         }
         
     }
@@ -202,7 +203,7 @@ Annealing(
 int main(int argc, char** argv) {
     freopen(argv[1], "r", stdin);
     freopen("tmp/ans.txt", "w", stdout);
-
+    STEP = stod(argv[2]);
     int n, m;
     cin >> n >> m;
     vector<double> price(n);
