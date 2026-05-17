@@ -12,7 +12,20 @@
 using namespace std;
 
 mt19937 rng(4257179);
+uniform_real_distribution<double> dst(0.0, 1.0);
+
+double prob() {
+    return dst(rng);
+}
+
 const double EPS = 1e-9;
+double THRESHOLD;
+
+using TimePoint = chrono::steady_clock::time_point;
+
+bool TimeIsOver(const TimePoint& deadline) {
+    return chrono::steady_clock::now() >= deadline;
+}
 
 double Dist(pair<double, double> a, pair<double, double> b) {
     double dx = a.first - b.first;
@@ -64,7 +77,6 @@ double Cost(const vector<int> &cur_order) {
     return path_sm;
 }
 
-
 const double Lambda = 1000;
 
 double OptInsVertex(vector<int> &path, int ver) {
@@ -114,17 +126,20 @@ void GreedySolve(
     double cap,
     const vector<double>& req,
     vector<Cycle>& cycles,
-    function<double(double, double)> decide
+    function<double(double, double)> decide,
+    TimePoint deadline
 ) {
     bool found = true;
-    while (cycles.size() > v || found) {
+    while ((cycles.size() > v || found) && !TimeIsOver(deadline)) {
         found = false;
         int cycle_id1, cycle_id2;
         int cycle_pos1, cycle_pos2;
         double best_add = INF;
+
         for (int i = 0; i < cycles.size(); ++i) {
+            if (TimeIsOver(deadline)) return;
+
             for (int j = i + 1; j < cycles.size(); ++j) {
-                // if (cycles[i].GetTaken() + cycles[j].GetTaken() > cap) continue;
                 for (int p1 : {0, cycles[i].Size() - 1}) {
                     for (int p2 : {0, cycles[j].Size() - 1}) {
                         double add = decide(cycles[i].GetTaken(), cycles[j].GetTaken());
@@ -169,22 +184,27 @@ void GreedySolve(
     }
 }
 
-vector<vector<int>> Greedy(int n, int v, double cap, const vector<double> &req, vector<Cycle>& cycles) {
+vector<vector<int>> Greedy(
+    int n,
+    int v,
+    double cap,
+    const vector<double> &req,
+    vector<Cycle>& cycles,
+    TimePoint deadline
+) {
     auto decide1 = [cap](double lhs, double rhs) {
         if (lhs + rhs > cap) return 2 * INF;
         return 0.0;
     };
 
-    GreedySolve(n, v, cap, req, cycles, decide1);
+    GreedySolve(n, v, cap, req, cycles, decide1, deadline);
 
-    // cout << cycles.size() << endl;
-    if (cycles.size() > v) {
+    if (cycles.size() > v && !TimeIsOver(deadline)) {
         auto decide2 = [&](double lhs, double rhs) {
           return max(0.0, lhs + rhs - cap) * Lambda;
         };
-        GreedySolve(n, v, cap, req, cycles, decide2);
+        GreedySolve(n, v, cap, req, cycles, decide2, deadline);
     }
-
 
     vector<vector<int>> decomp;
     for (int i = 0; i < cycles.size(); ++i) {
@@ -199,10 +219,8 @@ vector<vector<int>> Greedy(int n, int v, double cap, const vector<double> &req, 
         decomp.push_back({0});
     }
 
-
     return decomp;
 }
-
 
 double GetDecompValue(int n, int v, double cap, const vector<double>& req, const vector<vector<int>>& decomp) {
     double result = 0;
@@ -227,7 +245,8 @@ vector<vector<int>> LocalSearch
     int v,
     double cap,
     const vector<double>& req,
-    vector<vector<int>>& decomp
+    vector<vector<int>>& decomp,
+    TimePoint deadline
 ) {
     vector<double> taken(v);
     vector<int> mapping(n + 1);
@@ -245,13 +264,15 @@ vector<vector<int>> LocalSearch
         result += max(0.0, taken[i] - cap) * Lambda;
     }
 
-    while (1) {
+    while (!TimeIsOver(deadline)) {
 
         double best_result = result;
         int best_id = -1;
         int best_change = -1;
 
         for (int id = 1; id <= n; ++id) {
+            if (TimeIsOver(deadline)) return decomp;
+
             for (int path_id = 0; path_id < v; ++path_id) {
                 if (mapping[id] == path_id) continue;
                 auto path1 = decomp[mapping[id]];
@@ -275,7 +296,6 @@ vector<vector<int>> LocalSearch
                     best_id = id;
                     best_change = path_id;
                 }
-
             }
         }
 
@@ -295,9 +315,10 @@ vector<vector<int>> LocalSearch
             continue;
         }
 
-
         int best_id1, best_id2;
         for (int id1 = 1; id1 <= n; ++id1) {
+            if (TimeIsOver(deadline)) return decomp;
+
             for (int id2 = id1 + 1; id2 <= n; ++id2) {
                 if (mapping[id1] == mapping[id2]) continue;
                 double cur_result = result;
@@ -352,29 +373,23 @@ vector<vector<int>> LocalSearch
 }
 
 vector<vector<int>> RestartLocalSearch(int n, int v, double cap, const vector<double>& req) {
+    auto deadline = chrono::steady_clock::now() + chrono::seconds(6);
+
     vector<Cycle> cycles;
     for (int i = 1; i <= n; ++i) {
         cycles.emplace_back(vector<int>{i}, req[i]);
     }
 
-    auto best_decomp = Greedy(n, v, cap, req, cycles);
+    auto best_decomp = Greedy(n, v, cap, req, cycles, deadline);
     double best_result = GetDecompValue(n, v, cap, req, best_decomp);
 
-    auto start_time = chrono::steady_clock::now();
-
-    int iter = 0;
-
-    while (1) {
-        auto now = chrono::steady_clock::now();
-        auto elapsed = chrono::duration_cast<chrono::seconds>(now - start_time).count();
-        if (elapsed > 5) {
-            break;
-        }
-
+    while (!TimeIsOver(deadline)) {
         auto sol = best_decomp;
 
         vector<Cycle> new_cycles;
         for (int i = 0; i < v; ++i) {
+            if (TimeIsOver(deadline)) break;
+
             vector<int> ord;
             for (int j : sol[i]) {
                 if (j != 0) {
@@ -385,7 +400,7 @@ vector<vector<int>> RestartLocalSearch(int n, int v, double cap, const vector<do
             double taken = 0;
 
             for (int x : ord) {
-                if (rng() % 4 == 0) {
+                if (prob() <= THRESHOLD) {
                     if (!path.empty()) {
                         new_cycles.emplace_back(path, taken);
                     }
@@ -401,8 +416,22 @@ vector<vector<int>> RestartLocalSearch(int n, int v, double cap, const vector<do
             }
         }
 
-        sol = Greedy(n, v, cap, req, new_cycles);
-        sol = LocalSearch(n, v, cap, req, sol);
+        if (TimeIsOver(deadline)) {
+            break;
+        }
+
+        sol = Greedy(n, v, cap, req, new_cycles, deadline);
+
+        if (TimeIsOver(deadline)) {
+            break;
+        }
+
+        sol = LocalSearch(n, v, cap, req, sol, deadline);
+
+        if (TimeIsOver(deadline)) {
+            break;
+        }
+
         auto cur_result = GetDecompValue(n, v, cap, req, sol);
         if (cur_result < best_result) {
             best_result = cur_result;
@@ -416,7 +445,8 @@ vector<vector<int>> RestartLocalSearch(int n, int v, double cap, const vector<do
 int main(int argc, char **argv) {
     freopen(argv[1], "r", stdin);
     freopen("tmp/ans.txt", "w", stdout);
-
+    THRESHOLD = stod(argv[2]);
+    
     int n, v;
     cin >> n >> v;
     --n;
