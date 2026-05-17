@@ -15,6 +15,7 @@ double prob() {
     return dist(rng);
 }
 
+double STEP;
 
 vector<int> SimulatedAnnealing(int n, int m, const vector<pair<int, int>>& edges) {
     vector<vector<int>> graph(n);
@@ -95,7 +96,6 @@ vector<int> SimulatedAnnealing(int n, int m, const vector<pair<int, int>>& edges
 
         int cur_val = CostOrder(order, true);
         double temperature = 400;
-        double step = 0.99;
         
         for (int it = 0; it < iter; ++it) {
             auto new_order = Mutate(cur_coloring);
@@ -104,7 +104,7 @@ vector<int> SimulatedAnnealing(int n, int m, const vector<pair<int, int>>& edges
                 cur_val = new_val;
                 order = new_order;
             }
-            temperature *= step;
+            temperature *= STEP;
         }
     }
 
@@ -114,7 +114,8 @@ vector<int> SimulatedAnnealing(int n, int m, const vector<pair<int, int>>& edges
 int main(int argc, char** argv) {
     freopen(argv[1], "r", stdin);
     freopen("tmp/ans.txt", "w", stdout);
-
+    STEP = stod(argv[2]);
+    
     int n, m;
     cin >> n >> m;
     vector<pair<int, int>> edges(m);

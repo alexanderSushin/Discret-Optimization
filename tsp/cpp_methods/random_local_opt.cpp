@@ -20,7 +20,7 @@ double Dist(pair<double, double> a, pair<double, double> b) {
 
 
 const int RESTART = 10000;
-const int K = 20;
+int K = 20;
 const double INF = 1e18;
 
 vector<int> Greedy(int n, const vector<pair<double, double>>& points) {
@@ -155,7 +155,7 @@ vector<int> Annealing(int n, const vector<pair<double, double>>& points) {
 int main(int argc, char** argv) {
     freopen(argv[1], "r", stdin);
     freopen("tmp/ans.txt", "w", stdout);
-
+    K = stoi(argv[2]);
     int n;
     cin >> n;
     vector<pair<double, double>> points(n);
